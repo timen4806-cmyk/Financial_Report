@@ -9,6 +9,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Android APK
@@ -25,6 +28,9 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Make Gradle executable
+        run: chmod +x gradlew || true
+
       - name: Decode Debug Keystore (if present)
         run: |
           if [ -f "debug.keystore.base64" ]; then
@@ -33,7 +39,7 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --no-configuration-cache --no-daemon --stacktrace
 
       - name: Locate Generated APK
         id: locate_apk
