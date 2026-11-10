@@ -1,0 +1,6 @@
+{
+  "name": "Financial Reports HZdotCOM",
+  "description": "Aplikasi Laporan Keuangan HZdotCOM dengan Ekspor PDF, Quick Share Social Media, dan Mode Gelap",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
