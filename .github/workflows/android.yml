@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-configuration-cache --stacktrace
+        run: ./gradlew assembleDebug --no-configuration-cache --no-daemon --stacktrace
 
       - name: Locate Generated APK
         id: locate_apk
@@ -50,7 +50,7 @@ jobs:
           echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
           echo "Found APK at: $APK_PATH"
 
-      - name: Upload APK Artifact (Downloadable in Actions tab)
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Financial_Reports_App_Debug.apk
@@ -61,8 +61,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.APK_PATH }}
-          name: Financial Reports App Release
-          tag_name: v1.0.0
+          name: Financial Reports Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.0.0' }}
           allowUpdates: true
           body: |
             🚀 **Financial Reports HZdotCOM Android App Build**
