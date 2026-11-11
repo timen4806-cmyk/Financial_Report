@@ -27,44 +27,77 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Accept Android SDK Licenses
+      - name: Setup Android SDK & Licenses
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDK_MANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDK_MANAGER" ]; then
+          SDK_MANAGER=$(find "$SDK_ROOT" -name "sdkmanager" -type f 2>/dev/null | head -n 1)
+          if [ -z "$SDK_MANAGER" ]; then
             SDK_MANAGER="$(command -v sdkmanager || true)"
           fi
+          echo "Using sdkmanager: $SDK_MANAGER"
           if [ -n "$SDK_MANAGER" ] && [ -x "$SDK_MANAGER" ]; then
             yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDK_MANAGER" "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1" || true
+            "$SDK_MANAGER" --install "cmdline-tools;latest" || true
+            LATEST_MANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+            if [ -x "$LATEST_MANAGER" ]; then
+              SDK_MANAGER="$LATEST_MANAGER"
+            fi
+            yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDK_MANAGER" --install "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1"
+          else
+            echo "::warning::sdkmanager not found in $SDK_ROOT"
           fi
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
+          gradle-version: '9.3.1'
           cache-disabled: true
 
-      - name: Decode Debug Keystore (if present)
+      - name: Prepare Debug Keystore
         run: |
           if [ -f "debug.keystore.base64" ]; then
             base64 --decode debug.keystore.base64 > debug.keystore || base64 -d debug.keystore.base64 > debug.keystore
-            echo "Decoded debug.keystore"
+            echo "Decoded debug.keystore from base64"
+          fi
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "Generated fallback debug.keystore"
           fi
 
       - name: Build Debug APK
         run: |
-          if [ -f "./gradlew" ]; then
+          set -o pipefail
+          if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
             chmod +x gradlew
-            ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
+            ./gradlew assembleDebug --no-daemon --no-configuration-cache --console=plain --stacktrace 2>&1 | tee build.log
           else
-            gradle assembleDebug --no-daemon --no-configuration-cache --stacktrace
+            gradle assembleDebug --no-daemon --no-configuration-cache --console=plain --stacktrace 2>&1 | tee build.log
           fi
+
+      - name: Report Build Failure Details
+        if: failure()
+        run: |
+          if [ -f "build.log" ]; then
+            ERR_MSG=$(grep -A 15 -m 1 "FAILURE:\|What went wrong:\|e: file://\|Execution failed" build.log | tr '\n' ' ')
+            if [ -n "$ERR_MSG" ]; then
+              echo "::error::$ERR_MSG"
+            fi
+            tail -n 80 build.log
+          fi
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build.log
 
       - name: Locate Generated APK
         run: |
           APK_PATH=$(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "Error: APK not found!"
+            echo "::error::APK file not found under app/build/outputs/apk/debug/"
             exit 1
           fi
           echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
