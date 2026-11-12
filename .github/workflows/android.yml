@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload Build Log on Failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gradle-build-log
           path: build.log
@@ -105,7 +105,7 @@ jobs:
           echo "Found APK at: $APK_PATH"
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Financial_Reports_App_Debug.apk
           path: ${{ env.APK_PATH }}
@@ -117,7 +117,8 @@ jobs:
           files: ${{ env.APK_PATH }}
           name: Financial Reports Release ${{ github.ref_name }}
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.0.0' }}
-          allowUpdates: true
+          overwrite_files: true
+          make_latest: 'true'
           body: |
             🚀 **Financial Reports HZdotCOM Android App Build**
             
