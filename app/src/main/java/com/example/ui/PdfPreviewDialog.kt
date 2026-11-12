@@ -1,15 +1,25 @@
 package com.example.ui
 
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -17,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,9 +46,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.utils.PdfExportResult
 import com.example.utils.PdfExporter
+import com.example.utils.PdfSaveLocation
 import com.example.utils.ShareUtils
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,7 +61,7 @@ fun PdfPreviewDialog(
     totalKeluar: Long,
     saldoAkhir: Long,
     itemCount: Int,
-    onGeneratePdf: (periodeText: String) -> File?,
+    onGeneratePdf: (customTitle: String, periodeText: String, saveLocation: PdfSaveLocation) -> PdfExportResult?,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -57,7 +69,25 @@ fun PdfPreviewDialog(
     var periodeText by remember {
         mutableStateOf(SimpleDateFormat("MMMM yyyy", Locale("id", "ID")).format(Date()))
     }
-    var generatedFile by remember { mutableStateOf<File?>(null) }
+    var selectedLocation by remember { mutableStateOf(PdfSaveLocation.DOWNLOADS) }
+    var exportResult by remember { mutableStateOf<PdfExportResult?>(null) }
+    var customSavedMessage by remember { mutableStateOf<String?>(null) }
+
+    // System SAF Save-As launcher for custom folder or Android < 10 fallback
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { targetUri ->
+        val pendingFile = exportResult?.cacheFile
+        if (targetUri != null && pendingFile != null) {
+            val copied = PdfExporter.copyFileToUri(context, pendingFile, targetUri)
+            if (copied) {
+                customSavedMessage = "Berhasil disimpan ke folder pilihan Anda."
+                Toast.makeText(context, "PDF berhasil disimpan!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Gagal menyimpan file PDF.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -71,15 +101,17 @@ fun PdfPreviewDialog(
         },
         title = {
             Text(
-                text = "Cetak & Share Laporan Keuangan",
+                text = "Cetak, Simpan & Share PDF",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
                     value = judulLaporan,
@@ -102,6 +134,42 @@ fun PdfPreviewDialog(
                         .testTag("pdf_periode_input"),
                     shape = RoundedCornerShape(10.dp)
                 )
+
+                // Folder Destination Picker (Download or Documents)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Folder Penyimpanan Internal HP:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PdfSaveLocation.entries.forEach { location ->
+                            FilterChip(
+                                selected = selectedLocation == location,
+                                onClick = { selectedLocation = location },
+                                label = { Text(location.label) },
+                                leadingIcon = if (selectedLocation == location) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                } else null,
+                                modifier = Modifier.testTag("folder_chip_${location.name.lowercase()}")
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Lokasi: ${selectedLocation.folderDisplay}/",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 // Quick Summary Card inside dialog
                 Card(
@@ -133,13 +201,67 @@ fun PdfPreviewDialog(
                     }
                 }
 
-                if (generatedFile != null) {
-                    Text(
-                        text = "File PDF berhasil dibuat!\n${generatedFile?.name}",
-                        color = Color(0xFF2E7D32),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                exportResult?.let { result ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE8F5E9)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "PDF tersimpan di:\n${result.displayPath}",
+                                color = Color(0xFF1B5E20),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            customSavedMessage?.let { msg ->
+                                Text(
+                                    text = msg,
+                                    color = Color(0xFF2E7D32),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        ShareUtils.openPdfFile(context, result.cacheFile, result.publicUri)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("open_pdf_button"),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Buka PDF", style = MaterialTheme.typography.labelMedium)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        createDocumentLauncher.launch(result.fileName)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("save_as_pdf_button"),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Folder Lain", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -150,10 +272,49 @@ fun PdfPreviewDialog(
             ) {
                 Button(
                     onClick = {
-                        val file = onGeneratePdf(periodeText)
-                        generatedFile = file
-                        if (file != null) {
-                            ShareUtils.sharePdfFile(context, file)
+                        customSavedMessage = null
+                        val result = onGeneratePdf(judulLaporan, periodeText, selectedLocation)
+                        exportResult = result
+                        if (result != null) {
+                            if (result.savedToPublicStorage) {
+                                Toast.makeText(
+                                    context,
+                                    "PDF disimpan ke ${result.displayPath}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                                createDocumentLauncher.launch(result.fileName)
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "PDF dibuat di ${result.displayPath}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "Gagal membuat file PDF.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("save_pdf_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("SIMPAN PDF KE ${selectedLocation.label.uppercase()}", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = {
+                        customSavedMessage = null
+                        val result = onGeneratePdf(judulLaporan, periodeText, selectedLocation)
+                        exportResult = result
+                        if (result != null) {
+                            ShareUtils.sharePdfFile(context, result.cacheFile)
+                        } else {
+                            Toast.makeText(context, "Gagal membuat file PDF.", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier
@@ -164,7 +325,7 @@ fun PdfPreviewDialog(
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("PROSES & BAGIKAN PDF", fontWeight = FontWeight.Bold)
+                    Text("SIMPAN & BAGIKAN PDF", fontWeight = FontWeight.Bold)
                 }
 
                 Row(
@@ -211,7 +372,7 @@ fun PdfPreviewDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Batal")
+                Text("Tutup")
             }
         }
     )

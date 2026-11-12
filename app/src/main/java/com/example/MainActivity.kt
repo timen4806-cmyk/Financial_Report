@@ -152,8 +152,8 @@ fun FinancialAppContent(viewModel: FinancialViewModel) {
                 totalKeluar = summary.totalKeluar,
                 saldoAkhir = summary.saldoAkhir,
                 itemCount = transactions.size,
-                onGeneratePdf = { periode ->
-                    viewModel.generatePdfReport(periode)
+                onGeneratePdf = { customTitle, periode, saveLocation ->
+                    viewModel.generatePdfReport(customTitle, periode, saveLocation)
                 },
                 onDismiss = { showPdfDialog = false }
             )

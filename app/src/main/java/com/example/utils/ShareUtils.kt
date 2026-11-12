@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
-import com.example.data.KasTransaction
 import java.io.File
 import java.net.URLEncoder
 
@@ -34,6 +33,29 @@ object ShareUtils {
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "Gagal membagikan file PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Opens the saved PDF file using an installed PDF viewer
+     */
+    fun openPdfFile(context: Context, pdfFile: File, publicUri: Uri? = null) {
+        try {
+            val uriToOpen = publicUri ?: FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uriToOpen, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            context.startActivity(Intent.createChooser(viewIntent, "Buka file PDF dengan..."))
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "Tidak ada aplikasi pembuka PDF yang ditemukan.", Toast.LENGTH_SHORT).show()
         }
     }
 

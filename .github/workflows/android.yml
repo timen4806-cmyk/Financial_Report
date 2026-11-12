@@ -43,7 +43,8 @@ jobs:
               SDK_MANAGER="$LATEST_MANAGER"
             fi
             yes | "$SDK_MANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDK_MANAGER" --install "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1"
+            "$SDK_MANAGER" --install "platform-tools" "build-tools;36.0.0" "platforms;android-36"
+            "$SDK_MANAGER" --install "platforms;android-36.1" || true
           else
             echo "::warning::sdkmanager not found in $SDK_ROOT"
           fi

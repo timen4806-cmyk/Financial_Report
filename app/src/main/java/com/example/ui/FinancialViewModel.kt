@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.FinancialRepository
 import com.example.data.KasTransaction
+import com.example.utils.PdfExportResult
 import com.example.utils.PdfExporter
+import com.example.utils.PdfSaveLocation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -222,14 +223,20 @@ class FinancialViewModel(application: Application) : AndroidViewModel(applicatio
         repository.setLogoUri(uriStr)
     }
 
-    fun generatePdfReport(periodeManual: String): File? {
+    fun generatePdfReport(
+        customTitle: String,
+        periodeManual: String,
+        saveLocation: PdfSaveLocation = PdfSaveLocation.DOWNLOADS
+    ): PdfExportResult? {
         val context = getApplication<Application>().applicationContext
+        val reportTitle = customTitle.trim().ifBlank { _activeGroup.value }
         return PdfExporter.generatePdf(
             context = context,
-            groupTitle = _activeGroup.value,
+            groupTitle = reportTitle,
             periodeText = periodeManual.ifBlank { SimpleDateFormat("dd MMMM yyyy", Locale("id", "ID")).format(Date()) },
             logoUriString = _logoUri.value,
-            transactions = transactions.value
+            transactions = transactions.value,
+            saveLocation = saveLocation
         )
     }
 }
